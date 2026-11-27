@@ -124,10 +124,11 @@
               <div class="recipe">
                 <h2>{card.title}</h2>
                 {#if card.time}<p class="time">{card.time}</p>{/if}
-                <div class="md">{@html card.html}</div>
+                {#if card.blurb}<p class="blurb">{card.blurb}</p>{/if}
+                {#if card.html.trim()}<div class="md">{@html card.html}</div>{/if}
               </div>
               <button class="return" onclick={() => (flipped = false)} tabindex={flipped ? 0 : -1}>
-                Back to deck
+                Back
               </button>
             </div>
           {/if}
@@ -229,7 +230,6 @@
     color: var(--ink);
     display: flex;
     align-items: center;
-    justify-content: center;
     padding: 56px 28px;
   }
   .front::before {
@@ -241,9 +241,6 @@
     pointer-events: none;
   }
 
-  .title {
-    text-align: center;
-  }
   .title h2 {
     margin: 0 0 14px;
     font-family: var(--display);
@@ -307,6 +304,22 @@
     flex-grow: 1;
     overflow-y: auto;
     padding: 28px 24px 12px;
+    /* Centre short content vertically; auto margins fall back to top-aligned
+       (and scrollable) once the recipe is taller than the card. */
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+  }
+  .recipe > :global(:first-child) {
+    margin-top: auto;
+  }
+  .recipe > :global(:last-child) {
+    margin-bottom: auto;
+  }
+  .blurb {
+    margin: 16px 0 0;
+    font-size: 17px;
+    line-height: 1.5;
   }
   .recipe h2 {
     margin: 0;
