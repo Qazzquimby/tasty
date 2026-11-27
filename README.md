@@ -1,6 +1,6 @@
 # tasty
 
-Suggests something to make and lets you pick one. Swipe left for the next idea, swipe right to make it (arrow keys work on desktop). Picking one opens the recipe fullscreen with a timer that runs until you hit Done or Cancel.
+Suggests something to make and lets you pick one. Swipe left for the next idea, swipe right to flip the card over and read the recipe (arrow keys and Esc work on desktop).
 
 ## Recipes
 
@@ -17,7 +17,7 @@ blurb: Air fryer, paprika, salt. Shake halfway.
 ...
 ```
 
-Everything after the frontmatter is shown when you pick it. Commit the file and the site rebuilds.
+Everything after the frontmatter goes on the back of the card. Commit the file and the site rebuilds.
 
 ## Development
 

@@ -2,19 +2,20 @@
   import { fade } from 'svelte/transition';
 
   /** cards: the top few of the queue, top card first. */
-  let { cards, onnext, onpick } = $props();
+  let { cards, onnext } = $props();
 
   const THRESHOLD = 90; // px of drag that commits a swipe
-  const FLING_MS = 220;
-  const TILT = -2.5; // resting tilt of the top card, from the mockup
+  const FLING_MS = 240;
+  const TILT = -2; // resting tilt of the top card
 
   let dx = $state(0);
   let dragging = $state(false);
-  let leaving = $state(0); // -1 flying left, 1 flying right, 0 idle
+  let leaving = $state(false);
+  let flipped = $state(false);
   let startX = 0;
 
   function down(e) {
-    if (leaving) return;
+    if (leaving || flipped) return;
     dragging = true;
     startX = e.clientX;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -27,35 +28,52 @@
   function up() {
     if (!dragging) return;
     dragging = false;
-    if (Math.abs(dx) > THRESHOLD) fling(Math.sign(dx));
+    if (dx > THRESHOLD) flip();
+    else if (dx < -THRESHOLD) next();
     else dx = 0;
   }
 
-  function fling(dir) {
+  function flip() {
+    dx = 0;
+    flipped = true;
+  }
+
+  function next() {
     if (leaving || !cards.length) return;
-    const slug = cards[0].slug;
-    leaving = dir;
-    dx = dir * (window.innerWidth + 200);
+    leaving = true;
+    dx = -(window.innerWidth + 200);
     setTimeout(() => {
-      leaving = 0;
+      leaving = false;
       dx = 0;
-      if (dir > 0) onpick(slug);
-      else onnext();
+      onnext();
     }, FLING_MS);
   }
 
   function onkeydown(e) {
-    if (e.key === 'ArrowLeft') fling(-1);
-    else if (e.key === 'ArrowRight') fling(1);
+    if (flipped) {
+      if (e.key === 'Escape' || e.key === 'ArrowLeft') flipped = false;
+    } else if (e.key === 'ArrowLeft') next();
+    else if (e.key === 'ArrowRight') flip();
   }
 
-  // While the top card flies off, the ones behind it step forward.
+  // Every dealt card gets its own messy resting angle and offset, seeded from its key
+  // so it stays put while it sits in the pile.
+  function scatter(key) {
+    let r = ((key * 7919) % 13) - 6;
+    if (Math.abs(r) < 2) r = r < 0 ? -3 : 3;
+    return { r, x: ((key * 104729) % 13) - 6, y: ((key * 15485863) % 9) - 2 };
+  }
+
+  // While the top card flies off, the next one steps up and straightens.
   const depthOf = (i) => (i === 0 ? 0 : i - (leaving ? 1 : 0));
 
-  function transformOf(i) {
-    if (i === 0) return `translateX(${dx}px) rotate(${TILT + dx / 18}deg)`;
-    const d = depthOf(i);
-    return d === 0 ? `rotate(${TILT}deg)` : `translateY(${-d * 16}px) scale(${1 - d * 0.06})`;
+  function transformOf(card, i) {
+    if (i === 0) {
+      return flipped ? 'none' : `translateX(${dx}px) rotate(${TILT + dx / 18}deg)`;
+    }
+    if (depthOf(i) === 0) return `rotate(${TILT}deg)`;
+    const s = scatter(card.key);
+    return `translate(${s.x}px, ${s.y}px) rotate(${s.r}deg)`;
   }
 </script>
 
@@ -68,29 +86,51 @@
 
   <div class="stack">
     {#each cards as card, i (card.key)}
+      {@const top = i === 0}
       <article
-        class="card d{depthOf(i)}"
-        class:dragging={i === 0 && dragging}
-        style:transform={transformOf(i)}
+        class="card"
+        class:top
+        class:dragging={top && dragging}
+        class:flipped={top && flipped}
+        style:transform={transformOf(card, i)}
         style:z-index={10 - i}
-        aria-hidden={i > 0}
-        onpointerdown={i === 0 ? down : undefined}
-        onpointermove={i === 0 ? move : undefined}
-        onpointerup={i === 0 ? up : undefined}
-        onpointercancel={i === 0 ? up : undefined}
+        style:--shade={1 - depthOf(i) * 0.1}
+        aria-hidden={!top}
+        onpointerdown={top ? down : undefined}
+        onpointermove={top ? move : undefined}
+        onpointerup={top ? up : undefined}
+        onpointercancel={top ? up : undefined}
         in:fade={{ duration: 200 }}
       >
-        {#if i === 0 && dx !== 0}
-          <span class="stamp" style:opacity={Math.min(1, Math.abs(dx) / THRESHOLD)}>
-            {dx > 0 ? 'Make it' : 'Next'}
-          </span>
-        {/if}
-        <div class="face">
-          <div class="time">{card.time}</div>
-          <div>
-            <h2>{card.title}</h2>
-            {#if card.blurb}<p>{card.blurb}</p>{/if}
+        <div class="flipper">
+          <div class="front" aria-hidden={top && flipped}>
+            {#if card.time}
+              <span class="index tl">{card.time}</span>
+              <span class="index br">{card.time}</span>
+            {/if}
+            <div class="title">
+              <h2>{card.title}</h2>
+              {#if card.blurb}<p>{card.blurb}</p>{/if}
+            </div>
+            {#if top && dx !== 0}
+              <span class="stamp" style:opacity={Math.min(1, Math.abs(dx) / THRESHOLD)}>
+                {dx > 0 ? 'Make it' : 'Next'}
+              </span>
+            {/if}
           </div>
+
+          {#if top}
+            <div class="back" aria-hidden={!flipped}>
+              <div class="recipe">
+                <h2>{card.title}</h2>
+                {#if card.time}<p class="time">{card.time}</p>{/if}
+                <div class="md">{@html card.html}</div>
+              </div>
+              <button class="return" onclick={() => (flipped = false)} tabindex={flipped ? 0 : -1}>
+                Back to deck
+              </button>
+            </div>
+          {/if}
         </div>
       </article>
     {:else}
@@ -98,13 +138,13 @@
     {/each}
   </div>
 
-  <footer class="hints">
+  <footer class="hints" class:hidden={flipped}>
     <span>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6" /></svg>
-      Swipe left for the next idea
+      Next
     </span>
     <span>
-      Swipe right to make it
+      Make it
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
     </span>
   </footer>
@@ -135,72 +175,114 @@
     position: relative;
   }
 
+  /* ---- the card ---- */
+
   .card {
     position: absolute;
-    inset: 30px 0 0 0;
-    box-sizing: border-box;
-    padding: 26px 24px;
-    border-radius: 28px;
-    color: var(--ink);
+    inset: 26px 22px 14px;
+    perspective: 1800px;
     touch-action: none;
     user-select: none;
-    transition:
-      transform 220ms ease,
-      background-color 220ms ease;
+    transition: transform 240ms ease;
   }
-  .card.d0 {
-    background: var(--accent);
+  .card.top {
     cursor: grab;
-  }
-  .card.d1 {
-    background: #5b6157;
-  }
-  .card.d2 {
-    background: #3a4037;
   }
   .card.dragging {
     transition: none;
     cursor: grabbing;
   }
+  .card.flipped {
+    touch-action: pan-y;
+    user-select: text;
+    cursor: auto;
+  }
 
-  .face {
-    height: 100%;
+  .flipper {
+    position: absolute;
+    inset: 0;
+    transform-style: preserve-3d;
+    transition: transform 520ms cubic-bezier(0.3, 0.7, 0.3, 1);
+  }
+  .flipped .flipper {
+    transform: rotateY(180deg);
+  }
+
+  .front,
+  .back {
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    border-radius: 26px;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      0 14px 32px rgba(0, 0, 0, 0.35);
+  }
+
+  /* front: playing-card layout, title in the middle, time as corner indices */
+  .front {
+    background: var(--accent);
+    filter: brightness(var(--shade, 1));
+    transition: filter 240ms ease;
+    color: var(--ink);
     display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    transition: opacity 220ms ease;
+    align-items: center;
+    justify-content: center;
+    padding: 56px 28px;
   }
-  .card:not(.d0) .face {
-    opacity: 0;
+  .front::before {
+    content: '';
+    position: absolute;
+    inset: 12px;
+    border: 1.5px solid rgba(28, 31, 27, 0.28);
+    border-radius: 18px;
+    pointer-events: none;
   }
 
-  .time {
-    align-self: flex-end;
-    font-size: 15px;
-    font-weight: 600;
+  .title {
+    text-align: center;
   }
-
-  h2 {
-    margin: 0 0 12px;
+  .title h2 {
+    margin: 0 0 14px;
     font-family: var(--display);
     font-weight: 800;
-    font-size: clamp(40px, 13vw, 56px);
+    font-size: clamp(40px, 12vw, 54px);
     line-height: 0.95;
     letter-spacing: -1.5px;
     overflow-wrap: break-word;
     hyphens: auto;
   }
-  .face p {
-    margin: 0;
+  .title p {
+    margin: 0 auto;
+    max-width: 24ch;
     font-size: 16px;
     line-height: 1.45;
   }
 
+  .index {
+    position: absolute;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .index.tl {
+    top: 24px;
+    left: 26px;
+  }
+  .index.br {
+    bottom: 24px;
+    right: 26px;
+    transform: rotate(180deg);
+  }
+
   .stamp {
     position: absolute;
-    top: 26px;
-    left: 24px;
-    padding: 5px 9px;
+    top: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 5px 10px;
     border-radius: 7px;
     background: var(--ink);
     color: var(--accent);
@@ -209,6 +291,86 @@
     text-transform: uppercase;
     letter-spacing: 0.8px;
   }
+
+  /* back: the recipe, on a dark card so it stays in the deck's world */
+  .back {
+    transform: rotateY(180deg);
+    background: #2a2e28;
+    color: var(--paper);
+    border: 1px solid #3a4037;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .recipe {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 28px 24px 12px;
+  }
+  .recipe h2 {
+    margin: 0;
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 32px;
+    letter-spacing: -0.5px;
+    line-height: 1.05;
+    color: var(--accent);
+  }
+  .time {
+    margin: 6px 0 0;
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  .md {
+    margin-top: 18px;
+    font-size: 16px;
+    line-height: 1.55;
+  }
+  .md :global(h1),
+  .md :global(h2),
+  .md :global(h3) {
+    margin: 22px 0 6px;
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 18px;
+    color: var(--paper);
+  }
+  .md :global(:first-child) {
+    margin-top: 0;
+  }
+  .md :global(p),
+  .md :global(ul),
+  .md :global(ol) {
+    margin: 0 0 10px;
+  }
+  .md :global(ul),
+  .md :global(ol) {
+    padding-left: 22px;
+  }
+  .md :global(li) {
+    margin-bottom: 4px;
+  }
+  .md :global(li::marker) {
+    color: var(--accent);
+  }
+  .md :global(a) {
+    color: var(--accent);
+  }
+
+  .return {
+    margin: 8px 16px 16px;
+    height: 52px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--paper);
+    font-weight: 600;
+    font-size: 16px;
+  }
+
+  /* ---- chrome ---- */
 
   .empty {
     margin: 30px 0 0;
@@ -222,6 +384,10 @@
     gap: 12px;
     font-size: 13px;
     color: var(--muted);
+    transition: opacity 200ms ease;
+  }
+  .hints.hidden {
+    opacity: 0;
   }
   .hints span {
     display: flex;
@@ -231,7 +397,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .card,
-    .face {
+    .flipper {
       transition-duration: 1ms;
     }
   }
