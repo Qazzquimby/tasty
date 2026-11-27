@@ -1,0 +1,31 @@
+:root {
+  --ink: #1c1f1b;
+  --paper: #f4f5ef;
+  --accent: #ff8a4c;
+  --accent-deep: #c2410c;
+  --muted: #c9ccc2;
+  --line: #4a4f47;
+  --display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --body: Inter, system-ui, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--body);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  height: 100dvh;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
